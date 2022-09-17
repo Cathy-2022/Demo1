@@ -1,0 +1,201 @@
+---
+title: "Assessment3"
+author: "https://github.com/VictoriaUniversity-AU/assessment-1-Cathy-2022.git"
+date: '2022-09-13'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(tidymodels)
+library(caret)
+#install.packages("factoextra")
+library(factoextra)
+#install.packages("ClusterR")
+library(ClusterR)
+```
+### Task2: Import dataset, find out missing data and deal with missing data
+#### Import dataset and fill the blank sell with NA
+```{r}
+future <- read.csv("future_500_team01.csv", na.strings = c(""))
+str(future)
+```
+#### View missing data and create missing dataset
+```{r}
+sum(is.na(future))
+view(colSums(is.na(future)))
+missingdata <- future[!complete.cases(future),]
+```
+#### Deal with missing data of column State, assign value according to data of future or external sources
+```{r}
+future %>% filter(City=="New York")
+future[is.na(future$State) & future$City=="New York","State"] <- "NY"
+future[is.na(future$State) & future$City=="San Francisco","State"] <- "CA"
+future[is.na(future$State) & future$City=="San Francisco","State"] <- "CA"
+sum(is.na(future$State))
+```
+#### Deal with missing data, use median value to replace null data
+```{r}
+profit_median <- median(future$Profit, na.rm = TRUE)
+future[is.na(future$Profit),"Profit"] <- profit_median
+sum(is.na(future$Profit))
+
+future <- future %>%  mutate(
+  revenue_num = parse_number(Revenue),
+  expenses_num = parse_number(Expenses),
+  growth_num = parse_number(Growth)/100
+  )
+
+revenue_median <- median(future$revenue_num, na.rm = TRUE)
+future[is.na(future$revenue_num),"revenue_num"] <- revenue_median
+sum(is.na(future$revenue_num))
+
+expenses_median <- median(future$expenses_num, na.rm = TRUE)
+future[is.na(future$expenses_num),"expenses_num"] <- expenses_median
+sum(is.na(future$expenses_num))
+
+growth_median <- median(future$growth_num, na.rm = TRUE)
+future[is.na(future$growth_num),"growth_num"] <- growth_median
+sum(is.na(future$growth_num))
+
+employee_median <- median(future$Employees, na.rm = TRUE)
+future[is.na(future$Employees),"Employees"] <- employee_median
+```
+#### Dealing with outliers, finding posible dependent and independent value
+```{r}
+future_lin <- future %>% select(Employees, Profit, revenue_num, expenses_num, growth_num)
+sum(is.na(future_lin))
+boxplot(future_lin)
+boxplot.stats(future_lin$Profit)
+boxplot.stats(future_lin$revenue_num)
+
+future_lin <- future_lin %>% filter(Profit<16000000) %>% 
+  filter(revenue_num<19000000 & revenue_num>2000000)
+boxplot(future_lin)
+
+plot(future_lin)
+scatter.smooth(x=future_lin$revenue_num, y=future_lin$Profit)
+scatter.smooth(x=future_lin$expenses_num, y=future_lin$Profit)
+scatter.smooth(x=future_lin$Profit, y=future_lin$growth_num)
+
+```
+# Build linear regression models
+```{r}
+set.seed(1000)
+sub_future_lin <- future_lin %>% select(Profit, revenue_num, expenses_num)
+InTrain <- createDataPartition(future_lin$Profit,p=0.8, list = FALSE)
+Train_future <- sub_future_lin[InTrain,]
+Test_future <- sub_future_lin[-InTrain,]
+
+Train_future
+Test_future
+Model <- lm(Profit ~ ., data = Train_future) 
+summary(Model)
+```
+### Predicton result:revenue_num and expenses_num infulence linear regression equation most
+```{r}
+predict_future <- predict(Model, Test_future)
+predict_future
+plot(predict_future, type="l", lty=1.8, col="blue")
+
+```
+### Task4: Data Clustering
+#### Import dataset and figure out missing data
+```{r}
+mobile <- read.csv("mobile_phone_usage_team01.csv", na.strings = c(""))
+str(mobile)
+sum(is.na(mobile))
+mobile_miss <- mobile[!complete.cases(mobile),]
+```
+#### Clean data, using median value or "0" to replace null data
+```{r}
+battery_power_median <- median(mobile$battery_power, na.rm = TRUE)
+mobile[is.na(mobile$battery_power),"battery_power"] <- battery_power_median
+
+mobile[is.na(mobile$blue), "blue"] <- 0
+
+clock_speed_median <- median(mobile$clock_speed, na.rm = TRUE)
+mobile[is.na(mobile$clock_speed),"clock_speed"] <- clock_speed_median
+mobile[is.na(mobile$dual_sim), "dual_sim"] <- 0
+mobile[is.na(mobile$fc), "fc"] <- 0
+mobile[is.na(mobile$four_g), "four_g"] <- 0
+
+int_memory_median <- median(mobile$int_memory, na.rm = TRUE)
+mobile[is.na(mobile$int_memory),"int_memory"] <- int_memory_median
+
+m_dep_median <- median(mobile$m_dep, na.rm = TRUE)
+mobile[is.na(mobile$m_dep),"m_dep"] <- m_dep_median 
+
+mobile_wt_median <- median(mobile$mobile_wt, na.rm = TRUE)
+mobile[is.na(mobile$mobile_wt),"mobile_wt"] <- mobile_wt_median
+mobile[is.na(mobile$n_cores), "n_cores"] <- 1
+mobile[is.na(mobile$pc), "pc"] <- 0
+
+px_height_median <- median(mobile$px_height, na.rm = TRUE)
+mobile[is.na(mobile$px_height),"px_height"] <- px_height_median 
+px_width_median <- median(mobile$px_width, na.rm = TRUE)
+mobile[is.na(mobile$px_width),"px_width"] <- px_width_median
+ram_median <- median(mobile$ram, na.rm = TRUE)
+mobile[is.na(mobile$ram),"ram"] <- ram_median
+sch_median <- median(mobile$sc_h, na.rm = TRUE)
+mobile[is.na(mobile$sc_h),"sc_h"] <- sch_median
+
+sum(is.na(mobile))
+
+```
+#### Detecting and deal with outliers
+```{r}
+boxplot(mobile)
+boxplot.stats(mobile$px_width)
+```
+
+#### K-Mean clustering in the dataset and visualize the cluster
+```{r}
+mobile_scale <- scale(mobile)
+opt_mobile=Optimal_Clusters_KMeans(mobile_scale, max_clusters = 10,
+                                   initializer = "random",
+                                   criterion = "WCSSE",
+                                   plot_clusters = T)
+mobile_km = KMeans_rcpp(mobile_scale, clusters = 3, num_init = 5,
+                        max_iters = 200, initializer = "random")
+mobile_km$WCSS_per_cluster
+mobile_km_out <- as.data.frame(mobile_km$clusters) # cluster 2 is the largest cluster
+#mobile_final <- cbind(mobile, mobile_km_out)
+fviz_cluster(list(data=mobile_scale, cluster=mobile_km$clusters))
+```
+#### Changing K from 3 to 5
+```{r}
+mobile_km2 = KMeans_rcpp(mobile_scale, clusters = 5, num_init = 5,
+                        max_iters = 100, initializer = "random")
+mobile_km2$WCSS_per_cluster
+mobile_km_out2 <- as.data.frame(mobile_km2$clusters) # cluster 3 is the largest cluster
+#mobile_final2 <- cbind(mobile, mobile_km_out2)
+fviz_cluster(list(data=mobile_scale, cluster=mobile_km2$clusters))
+```
+#### Update model
+```{r}
+mobile_scale <- scale(mobile)
+opt_mobile1=Optimal_Clusters_KMeans(mobile_scale, max_clusters = 10,
+                                   initializer = "kmeans++",
+                                   criterion = "WCSSE",
+                                   plot_clusters = T)
+mobile_km1 = KMeans_rcpp(mobile_scale, clusters = 3, num_init = 5,
+                        max_iters = 250, initializer = "kmeans++")
+mobile_km1$WCSS_per_cluster
+mobile_km_out1 <- as.data.frame(mobile_km1$clusters)
+mobile_final <- cbind(mobile, mobile_km_out1)
+fviz_cluster(list(data=mobile_scale, cluster=mobile_km1$clusters))
+```
+#### Analysing largest cluster
+```{r}
+mobile_large <- mobile_final %>% filter(`mobile_km1$clusters`==3)
+summary(mobile_large)
+mobile_second <- mobile_final %>% filter(`mobile_km1$clusters`==1)
+summary(mobile_second)
+```
+
+
+
+
